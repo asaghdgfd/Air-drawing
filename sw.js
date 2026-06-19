@@ -1,6 +1,5 @@
-const CACHE = 'airdraw-v3';
+const CACHE = 'airdraw-v4';
 
-// Only cache our own app files — MediaPipe loads from CDN
 const ASSETS = [
   '/',
   '/index.html',
@@ -26,6 +25,10 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  // Don't cache CDN requests — let the browser handle them
+  if (e.request.url.includes('cdn.jsdelivr.net') || e.request.url.includes('unpkg.com')) {
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then((cached) => cached || fetch(e.request))
   );
