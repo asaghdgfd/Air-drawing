@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head><title>Camera Test</title></head>
+<body style="background:#000;color:#fff;font-family:sans-serif;padding:20px;">
+<h1>Camera Test</h1>
+<video id="v" autoplay playsinline style="width:640px;height:480px;background:#333;"></video>
+<p id="status">Requesting camera...</p>
+<script>
+navigator.mediaDevices.getUserMedia({video:true}).then(function(s){
+  document.getElementById('v').srcObject=s;
+  document.getElementById('status').textContent='Camera OK!';
+}).catch(function(e){
+  document.getElementById('status').textContent='ERROR: '+e.message;
+});
+</script>
+</body>
+</html>

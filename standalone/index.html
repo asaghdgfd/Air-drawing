@@ -71,7 +71,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
   </div>
 </div>
 
-<script src="./handtrack.js"></script>
+<script src="./simple-tracker.js"></script>
 <script>
 (function(){
   /* ── DOM ── */
@@ -136,32 +136,27 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
     setProgress(30,'Camera active ✓','Loading hand model…');
   }
 
-  /* ── Load handtrack model ── */
+  /* ── Load simple hand tracker ── */
   async function loadModel(){
-    var ht=handtrack;
-    if(!ht) throw new Error('handtrack.js not loaded');
-    model=await ht.load({maxDetectedHands:2,flipHorizontal:false});
-    setProgress(70,'Model loaded ✓','Starting detection…');
+    if(!window.simpleHandTracker) throw new Error('simple-tracker.js not loaded');
+    model=await window.simpleHandTracker.load();
+    setProgress(70,'Tracker ready ✓','Show hand to draw');
   }
 
-  /* ── Gesture detection from bounding box ── */
-  function getGesture(predictions){
-    if(!predictions||predictions.length===0) return null;
-    var p=predictions[0];
-    var bbox=p.bbox;
-    var handWidth=bbox[2],handHeight=bbox[3];
-    var aspectRatio=handHeight/Math.max(handWidth,1);
-    // Tall bounding box = fingers extended (draw)
-    // Short/square bounding box = fist (erase)
-    var isHandOpen=aspectRatio>1.8;
-    // Center of bounding box (mirrored)
-    var cx=(1-(bbox[0]+handWidth/2)/640)*window.innerWidth;
-    var cy=(bbox[1]+handHeight/2)/480*window.innerHeight;
+  /* ── Gesture detection from simple tracker regions ── */
+  function getGesture(regions){
+    if(!regions||regions.length===0) return null;
+    var r=regions[0];
+    // Tall aspect ratio = open hand (draw), square = fist (erase)
+    var isHandOpen=r.aspect>1.4;
+    // Mirror X coordinate
+    var cx=window.innerWidth-r.centerX;
+    var cy=r.centerY;
     return {
       mode:isHandOpen?'draw':'erase',
       point:{x:cx,y:cy},
-      bbox:bbox,
-      predictions:predictions
+      bbox:r.bbox,
+      regions:regions
     };
   }
 
@@ -180,13 +175,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
     ctx.restore();
   }
 
-  function drawSkeleton(predictions){
+  function drawSkeleton(regions){
     skCtx.clearRect(0,0,skCanvas.width,skCanvas.height);
-    if(!predictions) return;
-    for(var i=0;i<predictions.length;i++){
-      var p=predictions[i];
-      var bbox=p.bbox;
+    if(!regions) return;
+    for(var i=0;i<regions.length;i++){
+      var r=regions[i];
+      var bbox=r.bbox;
       var w=window.innerWidth,h=window.innerHeight;
+      // bbox is [x, y, width, height] in video coordinates
       var sx=(1-(bbox[0]+bbox[2]/2)/640)*w;
       var sy=(bbox[1]+bbox[3]/2)/480*h;
       var bw=bbox[2]/640*w;
@@ -211,7 +207,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
   async function detectLoop(){
     if(!model||!cameraEnabled){animationId=requestAnimationFrame(detectLoop);return;}
     try{
-      var predictions=await model.detect(video);
+      var predictions=window.simpleHandTracker.detect(video);
       var gesture=getGesture(predictions);
 
       // Draw skeleton
@@ -322,23 +318,27 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
   /* ── Boot ── */
   (async function(){
     try{
+      console.log('Step 1: Starting camera...');
       await startCamera();
+      console.log('Step 2: Camera OK, hiding overlay');
       overlay.classList.add('hidden');
-      setStatus('loading','Loading hand model…');
+      setStatus('loading','Loading hand tracker…');
+      console.log('Step 3: Loading hand tracker...');
       await loadModel();
+      console.log('Step 4: Model OK, starting detection');
       setProgress(100,'Ready!','Show hand to draw');
       overlay.classList.add('hidden');
       setStatus('idle','Show hand to draw, fist to erase');
       detectLoop();
     }catch(err){
-      console.error(err);
+      console.error('BOOT ERROR:',err);
       setStatus('idle','Error: '+err.message);
       overlay.classList.remove('hidden');
       overlay.style.display='';
       overlay.innerHTML='<p style="color:#ff5555;font-size:18px;">⚠️ Failed to load</p>'+
         '<p style="color:#999;font-size:14px;max-width:400px;text-align:center;">'+
-        err.message+'<br><br>Make sure you are on HTTPS or localhost and have granted webcam permission.</p>'+
-        '<button onclick="location.reload()" style="padding:10px 24px;background:#ff3366;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Refresh</button>';
+        err.message+'<br><br>Open browser console (F12) for details.</p>'+
+        '<button onclick="location.reload()" style="padding:10px 24px;background:#ff3366;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;margin-top:12px;">Refresh</button>';
     }
   })();
 })();
