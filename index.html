@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Air Draw — Hand Tracking Canvas</title>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preload" href="app.js" as="script" crossorigin>
   <script>
     if ('serviceWorker' in navigator) {
@@ -165,8 +165,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; f
   </div>
 
   <!-- MediaPipe from CDN (loaded as globals) -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+  <script src="https://unpkg.com/@mediapipe/hands@0.4.1675469240/hands.js"></script>
+  <script src="https://unpkg.com/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
   <!-- App logic -->
   <script src="app.js"></script>
   <!-- Fallback: show error if app doesn't load in 15s -->
@@ -177,7 +177,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; f
         overlay.innerHTML = '<p style="color:#ff5555;font-size:18px;">⚠️ App failed to load</p>' +
           '<p style="color:#999;font-size:14px;max-width:400px;text-align:center;">' +
           'Check your internet connection.<br>MediaPipe AI model must load from CDN.<br><br>' +
-          '<a href="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" target="_blank" style="color:#ff3366;">Test CDN link</a> | ' +
+          '<a href="https://unpkg.com/@mediapipe/hands@0.4.1675469240/hands.js" target="_blank" style="color:#ff3366;">Test CDN link</a> | ' +
           '<button onclick="location.reload()" style="padding:8px 20px;background:#ff3366;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Refresh</button>' +
           '</p>';
       }

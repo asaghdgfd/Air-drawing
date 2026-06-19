@@ -147,7 +147,7 @@ async function initMediaPipe() {
   hands = new Hands({
     locateFile: (file) => {
       // All files served from CDN (WASM, model, graph, assets)
-      return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/' + file;
+      return 'https://unpkg.com/@mediapipe/hands@0.4.1675469240/' + file;
     },
   });
 
