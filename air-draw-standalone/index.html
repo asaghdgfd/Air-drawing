@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Air Draw — Standalone</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;font-family:'Segoe UI',system-ui,sans-serif;color:#fff}
+#app{position:relative;width:100vw;height:100vh}
+#video-input{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:0}
+#drawing-canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;touch-action:none;cursor:crosshair}
+#skeleton-canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none;display:none}
+#controls-panel{position:fixed;top:20px;right:20px;width:260px;background:rgba(15,15,25,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:22px;z-index:100;box-shadow:0 8px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05)}
+#controls-panel h2{font-size:18px;font-weight:700;margin-bottom:16px;text-align:center;letter-spacing:.5px;background:linear-gradient(135deg,#ff3366,#ff6b9d);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.control-group{margin-bottom:14px}
+.control-group label{display:block;font-size:11px;font-weight:600;margin-bottom:5px;color:#999;text-transform:uppercase;letter-spacing:.8px}
+input[type=color]{width:100%;height:38px;border:2px solid rgba(255,255,255,.1);border-radius:10px;cursor:pointer;background:transparent;padding:2px}
+input[type=range]{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:rgba(255,255,255,.1);border-radius:3px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:#ff3366;border:2px solid rgba(255,255,255,.3);cursor:pointer}
+.buttons{display:flex;gap:6px;flex-wrap:wrap}
+.buttons button{flex:1 1 calc(50% - 3px);padding:9px 8px;border:1px solid rgba(255,255,255,.08);border-radius:10px;background:rgba(255,255,255,.06);color:#ddd;font-size:11px;font-weight:600;cursor:pointer;transition:background .2s,transform .1s;white-space:nowrap}
+.buttons button:hover{background:rgba(255,51,102,.25);border-color:rgba(255,51,102,.4)}
+.buttons button:active{transform:scale(.95)}
+.buttons button.active{background:rgba(255,51,102,.35);border-color:#ff3366;color:#fff}
+#btn-toggle-cam{background:rgba(51,204,102,.15);border-color:rgba(51,204,102,.3);color:#5f5}
+#btn-toggle-cam.cam-off{background:rgba(204,51,51,.15);border-color:rgba(204,51,51,.3);color:#f55}
+#status-indicator{margin-top:14px;padding:10px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:8px;font-size:12px;color:#aaa}
+#status-dot{width:8px;height:8px;border-radius:50%;background:#666;flex-shrink:0;transition:background .3s,box-shadow .3s}
+#status-dot.idle{background:#666}
+#status-dot.drawing{background:#33cc66;box-shadow:0 0 8px rgba(51,204,102,.6)}
+#status-dot.loading{background:#ffcc00;box-shadow:0 0 8px rgba(255,204,0,.6);animation:pulse 1s infinite}
+#status-dot.paused{background:#3399ff;box-shadow:0 0 8px rgba(51,153,255,.6)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#loading-overlay{position:fixed;inset:0;background:rgba(10,10,10,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1000;color:#fff;gap:16px;transition:opacity .5s}
+#loading-overlay.hidden{opacity:0;pointer-events:none}
+.spinner{width:52px;height:52px;border:4px solid rgba(255,255,255,.08);border-top-color:#ff3366;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.progress-bar{width:200px;height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;margin-top:12px}
+.progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#ff3366,#ff6b9d);border-radius:2px;transition:width .3s}
+#help-text{margin-top:10px;font-size:10px;color:#666;text-align:center;line-height:1.6}
+#help-text strong{color:#999}
+@media(max-width:600px){#controls-panel{top:auto;bottom:10px;right:10px;left:10px;width:auto;padding:16px}.buttons button{flex:1 1 calc(33.33% - 4px)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="video-input" playsinline></video>
+  <canvas id="drawing-canvas"></canvas>
+  <canvas id="skeleton-canvas"></canvas>
+  <div id="controls-panel">
+    <h2>✋ Air Draw</h2>
+    <div class="control-group"><label>Brush Color</label><input type="color" id="brush-color" value="#ff3366"></div>
+    <div class="control-group"><label>Size: <span id="size-value">5</span> px</label><input type="range" id="brush-size" min="1" max="30" value="5"></div>
+    <div class="control-group"><label>Smoothing: <span id="smooth-value">0.50</span></label><input type="range" id="smoothing" min="0" max="100" value="50"></div>
+    <div class="control-group buttons">
+      <button id="btn-clear" title="Clear (C)">🗑 Clear</button>
+      <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
+      <button id="btn-save" title="Save PNG">💾 Save</button>
+      <button id="btn-toggle-cam" title="Toggle camera">📷 Camera</button>
+      <button id="btn-toggle-skeleton" title="Toggle skeleton (S)">🦴 Skeleton</button>
+    </div>
+    <div id="status-indicator"><span id="status-dot"></span><span id="gesture-status">Initializing…</span></div>
+    <div id="help-text"><strong>Hand open:</strong> Draw &nbsp;|&nbsp; <strong>Fist:</strong> Erase</div>
+  </div>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <p id="loading-text">Loading…</p>
+    <p class="sub" id="loading-sub">Please allow webcam access</p>
+    <div class="progress-bar"><div class="progress-fill" id="loading-progress"></div></div>
+  </div>
+</div>
+
+<script src="./handtrack.js"></script>
+<script>
+(function(){
+  /* ── DOM ── */
+  var video=document.getElementById('video-input');
+  var canvas=document.getElementById('drawing-canvas');
+  var skCanvas=document.getElementById('skeleton-canvas');
+  var ctx=canvas.getContext('2d');
+  var skCtx=skCanvas.getContext('2d');
+  var overlay=document.getElementById('loading-overlay');
+  var loadingText=document.getElementById('loading-text');
+  var loadingSub=document.getElementById('loading-sub');
+  var loadingProgress=document.getElementById('loading-progress');
+  var statusDot=document.getElementById('status-dot');
+  var gestureStatus=document.getElementById('gesture-status');
+  var brushColorInput=document.getElementById('brush-color');
+  var brushSizeInput=document.getElementById('brush-size');
+  var sizeValue=document.getElementById('size-value');
+  var smoothingInput=document.getElementById('smoothing');
+  var smoothValue=document.getElementById('smooth-value');
+  var btnClear=document.getElementById('btn-clear');
+  var btnUndo=document.getElementById('btn-undo');
+  var btnSave=document.getElementById('btn-save');
+  var btnToggleCam=document.getElementById('btn-toggle-cam');
+  var btnToggleSkeleton=document.getElementById('btn-toggle-skeleton');
+
+  /* ── State ── */
+  var isDrawing=false,lastPoint=null,currentColor='#ff3366',brushSize=5;
+  var smoothingFactor=0.5,cameraEnabled=true,skeletonVisible=false;
+  var undoStack=[],model=null,animationId=null;
+
+  /* ── Progress ── */
+  function setProgress(pct,text,sub){
+    loadingProgress.style.width=pct+'%';
+    if(text)loadingText.textContent=text;
+    if(sub)loadingSub.textContent=sub;
+  }
+
+  /* ── Canvas resize ── */
+  function resizeCanvases(){
+    var dpr=Math.min(window.devicePixelRatio||1,2);
+    var w=window.innerWidth,h=window.innerHeight;
+    canvas.width=w*dpr;canvas.height=h*dpr;
+    canvas.style.width=w+'px';canvas.style.height=h+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    skCanvas.width=w*dpr;skCanvas.height=h*dpr;
+    skCanvas.style.width=w+'px';skCanvas.style.height=h+'px';
+    skCtx.setTransform(dpr,0,0,dpr,0,0);
+    if(undoStack.length>0) ctx.putImageData(undoStack[undoStack.length-1],0,0);
+  }
+  window.addEventListener('resize',resizeCanvases);
+  resizeCanvases();
+
+  /* ── Camera ── */
+  async function startCamera(){
+    setProgress(5,'Requesting camera…','Please allow webcam access');
+    var stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'}});
+    video.srcObject=stream;
+    await new Promise(function(r){
+      if(video.readyState>=2){video.play();r();}
+      else video.onloadeddata=function(){video.play();r();};
+    });
+    setProgress(30,'Camera active ✓','Loading hand model…');
+  }
+
+  /* ── Load handtrack model ── */
+  async function loadModel(){
+    var ht=handtrack;
+    if(!ht) throw new Error('handtrack.js not loaded');
+    model=await ht.load({maxDetectedHands:2,flipHorizontal:false});
+    setProgress(70,'Model loaded ✓','Starting detection…');
+  }
+
+  /* ── Gesture detection from bounding box ── */
+  function getGesture(predictions){
+    if(!predictions||predictions.length===0) return null;
+    var p=predictions[0];
+    var bbox=p.bbox;
+    var handWidth=bbox[2],handHeight=bbox[3];
+    var aspectRatio=handHeight/Math.max(handWidth,1);
+    // Tall bounding box = fingers extended (draw)
+    // Short/square bounding box = fist (erase)
+    var isHandOpen=aspectRatio>1.8;
+    // Center of bounding box (mirrored)
+    var cx=(1-(bbox[0]+handWidth/2)/640)*window.innerWidth;
+    var cy=(bbox[1]+handHeight/2)/480*window.innerHeight;
+    return {
+      mode:isHandOpen?'draw':'erase',
+      point:{x:cx,y:cy},
+      bbox:bbox,
+      predictions:predictions
+    };
+  }
+
+  /* ── Drawing ── */
+  function smoothPoint(prev,curr,factor){
+    var alpha=1-factor;
+    return{x:prev.x+(curr.x-prev.x)*alpha,y:prev.y+(curr.y-prev.y)*alpha};
+  }
+
+  function eraseAt(point){
+    ctx.save();
+    ctx.globalCompositeOperation='destination-out';
+    ctx.beginPath();
+    ctx.arc(point.x,point.y,brushSize*2.5,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSkeleton(predictions){
+    skCtx.clearRect(0,0,skCanvas.width,skCanvas.height);
+    if(!predictions) return;
+    for(var i=0;i<predictions.length;i++){
+      var p=predictions[i];
+      var bbox=p.bbox;
+      var w=window.innerWidth,h=window.innerHeight;
+      var sx=(1-(bbox[0]+bbox[2]/2)/640)*w;
+      var sy=(bbox[1]+bbox[3]/2)/480*h;
+      var bw=bbox[2]/640*w;
+      var bh=bbox[3]/480*h;
+      // Draw bounding box
+      skCtx.strokeStyle=i===0?'rgba(0,255,100,0.6)':'rgba(51,153,255,0.5)';
+      skCtx.lineWidth=2;
+      skCtx.strokeRect(sx-bw/2,sy-bh/2,bw,bh);
+      // Draw center dot
+      skCtx.fillStyle=i===0?'#ff3366':'#3399ff';
+      skCtx.beginPath();
+      skCtx.arc(sx,sy,6,0,Math.PI*2);
+      skCtx.fill();
+      // Label
+      skCtx.fillStyle='#fff';
+      skCtx.font='12px sans-serif';
+      skCtx.fillText(i===0?'Hand 1':'Hand 2',sx-bw/2,sy-bh/2-8);
+    }
+  }
+
+  /* ── Detection loop ── */
+  async function detectLoop(){
+    if(!model||!cameraEnabled){animationId=requestAnimationFrame(detectLoop);return;}
+    try{
+      var predictions=await model.detect(video);
+      var gesture=getGesture(predictions);
+
+      // Draw skeleton
+      if(skeletonVisible) drawSkeleton(predictions);
+      else skCtx.clearRect(0,0,skCanvas.width,skCanvas.height);
+
+      if(!gesture){
+        if(isDrawing){saveUndo();isDrawing=false;lastPoint=null;}
+        setStatus('idle','Show hand to draw, fist to erase');
+        animationId=requestAnimationFrame(detectLoop);
+        return;
+      }
+
+      var mode=gesture.mode;
+      var point=gesture.point;
+
+      if(mode==='erase'){
+        eraseAt(point);
+        setStatus('drawing','Erasing… (fist)');
+      } else {
+        if(!isDrawing){
+          isDrawing=true;
+          lastPoint=point;
+          ctx.beginPath();
+          ctx.moveTo(point.x,point.y);
+          ctx.lineCap='round';
+          ctx.lineJoin='round';
+          ctx.strokeStyle=currentColor;
+          ctx.lineWidth=brushSize;
+        } else {
+          var smoothed=smoothPoint(lastPoint,point,smoothingFactor);
+          var midX=(lastPoint.x+smoothed.x)/2;
+          var midY=(lastPoint.y+smoothed.y)/2;
+          ctx.quadraticCurveTo(lastPoint.x,lastPoint.y,midX,midY);
+          ctx.stroke();
+          lastPoint=smoothed;
+        }
+        setStatus('drawing','Drawing… (open hand)');
+      }
+    }catch(e){console.error(e);}
+    animationId=requestAnimationFrame(detectLoop);
+  }
+
+  /* ── Status ── */
+  function setStatus(type,text){
+    statusDot.className=type;
+    gestureStatus.textContent=text;
+  }
+
+  /* ── Undo / Clear / Save ── */
+  function saveUndo(){
+    undoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height));
+    if(undoStack.length>20) undoStack.shift();
+  }
+  function clearCanvas(){
+    saveUndo();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    setStatus('idle','Canvas cleared');
+  }
+  function undo(){
+    if(undoStack.length===0) return;
+    ctx.putImageData(undoStack.pop(),0,0);
+    setStatus('idle','Undo');
+  }
+  function saveAsPNG(){
+    var link=document.createElement('a');
+    link.download='air-draw-'+Date.now()+'.png';
+    link.href=canvas.toDataURL('image/png');
+    link.click();
+    setStatus('idle','Saved!');
+  }
+
+  /* ── Event handlers ── */
+  brushColorInput.addEventListener('input',function(e){currentColor=e.target.value});
+  brushSizeInput.addEventListener('input',function(e){brushSize=parseInt(e.target.value,10);sizeValue.textContent=brushSize});
+  smoothingInput.addEventListener('input',function(e){smoothingFactor=parseInt(e.target.value,10)/100;smoothValue.textContent=smoothingFactor.toFixed(2)});
+  btnClear.addEventListener('click',clearCanvas);
+  btnUndo.addEventListener('click',undo);
+  btnSave.addEventListener('click',saveAsPNG);
+  btnToggleCam.addEventListener('click',function(){
+    cameraEnabled=!cameraEnabled;
+    btnToggleCam.classList.toggle('cam-off',!cameraEnabled);
+    btnToggleCam.textContent=cameraEnabled?'📷 Camera':'📷 Off';
+    setStatus('idle',cameraEnabled?'Camera resumed':'Camera paused');
+  });
+  btnToggleSkeleton.addEventListener('click',function(){
+    skeletonVisible=!skeletonVisible;
+    skCanvas.style.display=skeletonVisible?'block':'none';
+    btnToggleSkeleton.classList.toggle('active',skeletonVisible);
+    if(!skeletonVisible) skCtx.clearRect(0,0,skCanvas.width,skCanvas.height);
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.target.tagName==='INPUT') return;
+    switch(e.key.toLowerCase()){
+      case 'c':clearCanvas();break;
+      case 'z':if(e.ctrlKey||e.metaKey){e.preventDefault();undo();}break;
+      case 's':if(!e.ctrlKey&&!e.metaKey){
+        skeletonVisible=!skeletonVisible;
+        skCanvas.style.display=skeletonVisible?'block':'none';
+        btnToggleSkeleton.classList.toggle('active',skeletonVisible);
+        if(!skeletonVisible) skCtx.clearRect(0,0,skCanvas.width,skCanvas.height);
+      }break;
+      case '[':brushSize=Math.max(1,brushSize-2);brushSizeInput.value=brushSize;sizeValue.textContent=brushSize;break;
+      case ']':brushSize=Math.min(30,brushSize+2);brushSizeInput.value=brushSize;sizeValue.textContent=brushSize;break;
+    }
+  });
+
+  /* ── Boot ── */
+  (async function(){
+    try{
+      await startCamera();
+      overlay.classList.add('hidden');
+      setStatus('loading','Loading hand model…');
+      await loadModel();
+      setProgress(100,'Ready!','Show hand to draw');
+      overlay.classList.add('hidden');
+      setStatus('idle','Show hand to draw, fist to erase');
+      detectLoop();
+    }catch(err){
+      console.error(err);
+      setStatus('idle','Error: '+err.message);
+      overlay.classList.remove('hidden');
+      overlay.style.display='';
+      overlay.innerHTML='<p style="color:#ff5555;font-size:18px;">⚠️ Failed to load</p>'+
+        '<p style="color:#999;font-size:14px;max-width:400px;text-align:center;">'+
+        err.message+'<br><br>Make sure you are on HTTPS or localhost and have granted webcam permission.</p>'+
+        '<button onclick="location.reload()" style="padding:10px 24px;background:#ff3366;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Refresh</button>';
+    }
+  })();
+})();
+</script>
+</body>
+</html>
