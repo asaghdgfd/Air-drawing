@@ -8,7 +8,10 @@
   <link rel="preload" href="app.js" as="script" crossorigin>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(function() {});
+      // Unregister old service workers that may cache broken files
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        regs.forEach(function(reg) { reg.unregister(); });
+      });
     }
   </script>
   <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -166,5 +169,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; f
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
   <!-- App logic -->
   <script src="app.js"></script>
+  <!-- Fallback: show error if app doesn't load in 15s -->
+  <script>
+    setTimeout(function() {
+      var overlay = document.getElementById('loading-overlay');
+      if (overlay && !overlay.classList.contains('hidden')) {
+        overlay.innerHTML = '<p style="color:#ff5555;font-size:18px;">⚠️ App failed to load</p>' +
+          '<p style="color:#999;font-size:14px;max-width:400px;text-align:center;">' +
+          'Check your internet connection.<br>MediaPipe AI model must load from CDN.<br><br>' +
+          '<a href="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" target="_blank" style="color:#ff3366;">Test CDN link</a> | ' +
+          '<button onclick="location.reload()" style="padding:8px 20px;background:#ff3366;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Refresh</button>' +
+          '</p>';
+      }
+    }, 15000);
+  </script>
 </body>
 </html>
