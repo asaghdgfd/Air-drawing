@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Air Draw — Hand Tracking Canvas</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preload" href="app.js" as="script" crossorigin>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+  </script>
+  <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="styles.css"></noscript>
+  <style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #fff; }
+
+/* ===== App Container ===== */
+#app { position: relative; width: 100vw; height: 100vh; }
+
+/* ===== Video Background ===== */
+#video-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 0; }
+
+/* ===== Drawing Canvas ===== */
+#drawing-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; touch-action: none; cursor: crosshair; }
+
+/* ===== Skeleton Overlay Canvas ===== */
+#skeleton-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: none; }
+
+/* ===== Controls Panel ===== */
+#controls-panel { position: fixed; top: 20px; right: 20px; width: 260px; background: rgba(15, 15, 25, 0.78); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 22px; z-index: 100; box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05); transition: opacity 0.3s, transform 0.3s; }
+
+#controls-panel h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; text-align: center; letter-spacing: 0.5px; background: linear-gradient(135deg, #ff3366, #ff6b9d); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+.control-group { margin-bottom: 14px; }
+.control-group label { display: block; font-size: 11px; font-weight: 600; margin-bottom: 5px; color: #999; text-transform: uppercase; letter-spacing: 0.8px; }
+
+/* Toggle Checkbox */
+#toggle-pinch-resize { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-label { display: flex !important; align-items: center; gap: 10px; cursor: pointer; user-select: none; position: relative; }
+.toggle-switch { width: 40px; height: 22px; min-width: 40px; background: rgba(255, 255, 255, 0.1); border-radius: 11px; position: relative; transition: background 0.25s; flex-shrink: 0; }
+.toggle-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; background: #ccc; border-radius: 50%; transition: transform 0.25s, background 0.25s; }
+#toggle-pinch-resize:checked + .toggle-switch { background: rgba(255, 51, 102, 0.5); }
+#toggle-pinch-resize:checked + .toggle-switch::after { transform: translateX(18px); background: #ff3366; }
+
+/* Status Indicator */
+#status-indicator { margin-top: 14px; padding: 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06); display: flex; align-items: center; gap: 8px; font-size: 12px; color: #aaa; }
+#status-dot { width: 8px; height: 8px; border-radius: 50%; background: #666; flex-shrink: 0; transition: background 0.3s, box-shadow 0.3s; }
+#status-dot.idle    { background: #666; }
+#status-dot.drawing  { background: #33cc66; box-shadow: 0 0 8px rgba(51, 204, 102, 0.6); }
+#status-dot.erasing { background: #ff9933; box-shadow: 0 0 8px rgba(255, 153, 51, 0.6); }
+#status-dot.loading  { background: #ffcc00; box-shadow: 0 0 8px rgba(255, 204, 0, 0.6); animation: pulse 1s infinite; }
+#status-dot.paused   { background: #3399ff; box-shadow: 0 0 8px rgba(51, 153, 255, 0.6); }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Second Hand Status */
+#hand-status-secondary { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); display: flex; align-items: center; gap: 8px; font-size: 11px; color: #888; transition: opacity 0.3s; }
+#hand-status-secondary .dot { width: 7px; height: 7px; border-radius: 50%; background: #555; flex-shrink: 0; transition: background 0.3s, box-shadow 0.3s; }
+#hand-status-secondary .dot.active   { background: #33ccff; box-shadow: 0 0 6px rgba(51, 204, 255, 0.5); }
+#hand-status-secondary .dot.pinching { background: #ff3366; box-shadow: 0 0 6px rgba(255, 51, 102, 0.5); }
+#hand-status-secondary .dot.pausing  { background: #3399ff; box-shadow: 0 0 6px rgba(51, 153, 255, 0.5); }
+
+/* ===== Loading Overlay ===== */
+#loading-overlay { position: fixed; inset: 0; background: rgba(10, 10, 10, 0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; color: #fff; gap: 16px; transition: opacity 0.5s; }
+#loading-overlay p { font-size: 16px; color: #ccc; }
+#loading-overlay p.sub { font-size: 13px; color: #666; }
+#loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+/* Spinner */
+.spinner { width: 52px; height: 52px; border: 4px solid rgba(255, 255, 255, 0.08); border-top-color: #ff3366; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Progress Bar */
+.progress-bar { width: 200px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 12px; overflow: hidden; }
+.progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ff3366, #ff6b9d); border-radius: 2px; transition: width 0.3s ease; }
+  </style>
+</head>
+<body>
+
+  <!-- App container -->
+  <div id="app">
+
+    <!-- Webcam video (mirrored, shown as background) -->
+    <video id="video-input" playsinline></video>
+
+    <!-- Drawing canvas (transparent overlay on top of video) -->
+    <canvas id="drawing-canvas"></canvas>
+
+    <!-- Hand skeleton overlay canvas -->
+    <canvas id="skeleton-canvas"></canvas>
+
+    <!-- Controls panel (floating, glassmorphism) -->
+    <div id="controls-panel">
+      <h2>✋ Air Draw</h2>
+
+      <div class="control-group">
+        <label for="brush-color">Brush Color</label>
+        <input type="color" id="brush-color" value="#ff3366">
+      </div>
+
+      <div class="control-group">
+        <label for="brush-size">Size: <span id="size-value">5</span> px</label>
+        <input type="range" id="brush-size" min="1" max="30" value="5">
+      </div>
+
+      <div class="control-group">
+        <label for="toggle-pinch-resize" class="toggle-label">
+          <input type="checkbox" id="toggle-pinch-resize">
+          <span class="toggle-switch"></span>
+          Pinch Resize
+        </label>
+      </div>
+
+      <div class="control-group">
+        <label for="smoothing">Smoothing: <span id="smooth-value">0.50</span></label>
+        <input type="range" id="smoothing" min="0" max="100" value="50">
+      </div>
+
+      <div class="control-group buttons">
+        <button id="btn-clear" title="Clear canvas (C)">🗑 Clear</button>
+        <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
+        <button id="btn-save" title="Save as PNG">💾 Save</button>
+        <button id="btn-toggle-cam" title="Toggle camera">📷 Camera</button>
+        <button id="btn-toggle-skeleton" title="Toggle hand skeleton (S)">🦴 Skeleton</button>
+      </div>
+
+      <div id="status-indicator">
+        <span id="status-dot"></span>
+        <span id="gesture-status">Initializing…</span>
+      </div>
+
+      <div id="hand-status-secondary">
+        <span class="dot" id="secondary-dot"></span>
+        <span id="secondary-status">No second hand</span>
+      </div>
+
+      <div id="help-text">
+        <strong>Hand 1:</strong> ☝️ Draw &nbsp;|&nbsp; ✋ Erase<br>
+        <strong>Hand 2:</strong> 🤏 Resize &nbsp;|&nbsp; ✋ Pause
+      </div>
+    </div>
+
+    <!-- Small loading indicator (shown in controls panel while MediaPipe loads) -->
+    <div id="loading-indicator" style="display:none; text-align:center; padding:8px;">
+      <span style="display:inline-block; width:12px; height:12px; border:2px solid rgba(255,255,255,0.15); border-top-color:#ff3366; border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:6px;"></span>
+      <span style="font-size:11px; color:#888; vertical-align:middle;">Loading hand model…</span>
+    </div>
+
+    <!-- Full-screen loading overlay (shown until camera starts or error) -->
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <p>Loading…</p>
+      <p class="sub">Please allow webcam access</p>
+    </div>
+  </div>
+
+  <!-- MediaPipe + app logic as ES module -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
