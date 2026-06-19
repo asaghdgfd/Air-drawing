@@ -150,11 +150,14 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; f
       <span style="font-size:11px; color:#888; vertical-align:middle;">Loading hand model…</span>
     </div>
 
-    <!-- Full-screen loading overlay (shown until camera starts or error) -->
+    <!-- Full-screen loading overlay (shown until camera + MediaPipe ready) -->
     <div id="loading-overlay">
       <div class="spinner"></div>
-      <p>Loading…</p>
-      <p class="sub">Please allow webcam access</p>
+      <p id="loading-text">Loading…</p>
+      <p class="sub" id="loading-sub">Please allow webcam access</p>
+      <div class="progress-bar">
+        <div class="progress-fill" id="loading-progress"></div>
+      </div>
     </div>
   </div>
 

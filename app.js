@@ -20,6 +20,9 @@ const skeletonCanvas    = document.getElementById('skeleton-canvas');
 const ctx               = drawingCanvas.getContext('2d');
 const skCtx             = skeletonCanvas.getContext('2d');
 const loadingOverlay    = document.getElementById('loading-overlay');
+const loadingText       = document.getElementById('loading-text');
+const loadingSub        = document.getElementById('loading-sub');
+const loadingProgress   = document.getElementById('loading-progress');
 const gestureStatus     = document.getElementById('gesture-status');
 const statusDot         = document.getElementById('status-dot');
 
@@ -666,29 +669,55 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ============================================================
-   BOOT — Camera first, MediaPipe in background
+   LOADING PROGRESS
+   ============================================================ */
+function setProgress(pct, text, sub) {
+  if (loadingProgress) loadingProgress.style.width = pct + '%';
+  if (loadingText && text) loadingText.textContent = text;
+  if (loadingSub && sub) loadingSub.textContent = sub;
+}
+
+/* ============================================================
+   BOOT - Camera first, MediaPipe in background
    ============================================================ */
 (async () => {
-  // 1. Show camera INSTANTLY (the loading overlay is visible by default)
+  // Stage 1: Camera (0-30%)
+  setProgress(5, 'Requesting camera...', 'Please allow webcam access');
   await startCameraOnly();
+  setProgress(30, 'Camera active', 'Loading hand model...');
 
-  // Camera is live — fade out the overlay
+  // Stage 2: MediaPipe WASM + model (30-90%)
+  // Hide overlay so user sees camera behind it
   loadingOverlay.classList.add('hidden');
-  setStatus('loading', 'Loading hand model…');
+  setStatus('loading', 'Loading hand model...');
 
-  // 2. Load MediaPipe in background (doesn't block camera)
-  await initMediaPipe();
+  // Start MediaPipe in background
+  const mediaPipePromise = initMediaPipe();
+
+  // Gradually animate progress while MediaPipe loads
+  let progress = 30;
+  const progressInterval = setInterval(() => {
+    progress += Math.random() * 8;
+    if (progress > 90) progress = 90;
+    setProgress(progress, 'Loading hand model...', 'Downloading AI model (~6MB)');
+  }, 500);
+
+  await mediaPipePromise;
+  clearInterval(progressInterval);
+  setProgress(100, 'Ready!', 'Show index finger to draw');
 })().catch((err) => {
   console.error('Failed to initialize:', err);
   setStatus('idle', 'Error: ' + err.message);
   // Make overlay visible and show error
   loadingOverlay.classList.remove('hidden');
   loadingOverlay.style.display = '';
+  if (loadingProgress) loadingProgress.style.width = '0%';
   loadingOverlay.innerHTML =
     '<p style="color:#ff5555; font-size:18px;">⚠️ Failed to load</p>' +
     '<p style="color:#999; font-size:14px; max-width:400px; text-align:center;">' +
       err.message + '<br><br>' +
-      'Make sure you\'re serving this page from a secure context (HTTPS or localhost) ' +
+      'Make sure you're serving this page from a secure context (HTTPS or localhost) ' +
       'and have granted webcam permission.' +
     '</p>';
 });
+
