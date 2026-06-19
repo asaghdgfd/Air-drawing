@@ -1,11 +1,19 @@
-const CACHE = 'airdraw-v4';
+const CACHE = 'airdraw-v5';
 
+// Cache all app files including local MediaPipe
 const ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
   '/favicon.ico',
+  '/lib/mediapipe/hands/hands.js',
+  '/lib/mediapipe/hands/hands_solution_simd_wasm_bin.js',
+  '/lib/mediapipe/hands/hands_solution_simd_wasm_bin.wasm',
+  '/lib/mediapipe/hands/hands_solution_packed_assets_loader.js',
+  '/lib/mediapipe/hands/hand_landmark_lite.tflite',
+  '/lib/mediapipe/hands/hands.binarypb',
+  '/lib/mediapipe/camera_utils/camera_utils.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -25,10 +33,6 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Don't cache CDN requests — let the browser handle them
-  if (e.request.url.includes('cdn.jsdelivr.net') || e.request.url.includes('unpkg.com')) {
-    return;
-  }
   e.respondWith(
     caches.match(e.request).then((cached) => cached || fetch(e.request))
   );
