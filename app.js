@@ -8,8 +8,15 @@
  *   🗑️  Clear button in UI                    → Clear canvas
  */
 
-import { Hands } from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js';
-import { Camera } from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js';
+// MediaPipe loaded via <script> tags — Hands and Camera are globals
+if (typeof Hands === 'undefined' || typeof Camera === 'undefined') {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0a0a0a;color:#fff;flex-direction:column;gap:16px;font-family:sans-serif;text-align:center;padding:20px;">' +
+    '<p style="color:#ff5555;font-size:20px;">⚠️ Failed to load MediaPipe</p>' +
+    '<p style="color:#999;font-size:14px;">Check your internet connection and refresh.<br>MediaPipe AI model must load from CDN.</p>' +
+    '<button onclick="location.reload()" style="padding:10px 24px;background:#ff3366;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Refresh</button>' +
+    '</div>';
+  throw new Error('MediaPipe not loaded');
+}
 
 /* ============================================================
    DOM REFERENCES
@@ -103,20 +110,26 @@ resizeCanvases();
    CAMERA-ONLY MODE (instant start, no MediaPipe)
    ============================================================ */
 async function startCameraOnly() {
-  // Try to get camera without MediaPipe
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new Error('Camera API not available (requires HTTPS or localhost).');
+    throw new Error('Camera not available. Make sure you are on HTTPS or localhost.');
   }
-  cameraStream = await navigator.mediaDevices.getUserMedia({
+  // Timeout after 10 seconds in case permission prompt is ignored
+  const camPromise = navigator.mediaDevices.getUserMedia({
     video: { width: 640, height: 480, facingMode: 'user' }
   });
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Camera timed out. Did you allow camera access?')), 10000)
+  );
+  cameraStream = await Promise.race([camPromise, timeoutPromise]);
   videoElement.srcObject = cameraStream;
-  await new Promise((resolve) => {
-    videoElement.onloadedmetadata = () => {
-      videoElement.play();
-      resolve();
-    };
-  });
+  // Wait for video to be ready (with timeout)
+  await Promise.race([
+    new Promise((resolve) => {
+      if (videoElement.readyState >= 2) { videoElement.play(); resolve(); }
+      else { videoElement.onloadeddata = () => { videoElement.play(); resolve(); }; }
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Video failed to start')), 5000))
+  ]);
 }
 
 /* ============================================================

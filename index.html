@@ -161,7 +161,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; f
     </div>
   </div>
 
-  <!-- MediaPipe + app logic as ES module -->
-  <script type="module" src="app.js"></script>
+  <!-- MediaPipe from CDN (loaded as globals) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+  <!-- App logic -->
+  <script src="app.js"></script>
 </body>
 </html>
